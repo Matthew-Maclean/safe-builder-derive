@@ -2,6 +2,7 @@
 
 extern crate proc_macro;
 extern crate syn;
+extern crate itertools;
 
 #[macro_use]
 extern crate quote;
@@ -10,6 +11,7 @@ extern crate quote;
 mod test;
 
 use proc_macro::TokenStream;
+use itertools::Itertools;
 
 #[proc_macro_derive(SafeBuilder)]
 pub fn safe_builder(input: TokenStream) -> TokenStream
@@ -18,12 +20,13 @@ pub fn safe_builder(input: TokenStream) -> TokenStream
 }
 
 use syn::{Body, VariantData, Ty};
+use std::collections::HashMap;
 
 #[derive(PartialEq, Debug)]
 struct CompleteStruct
 {
     name: String,
-    fields: Vec<(String, Ty)>,
+    fields: HashMap<String, Ty>,
 }
 
 impl CompleteStruct
@@ -42,16 +45,26 @@ impl CompleteStruct
                 None => CompleteStruct
                 {
                     name: name,
-                    fields: vec![]
+                    fields: HashMap::new()
                 },
                 Some(ref field) => match field.ident
                 {
-                    Some(_) => CompleteStruct
+                    Some(_) =>
                     {
-                        name: name,
-                        fields: fields.iter()
-                            .map(|field| (field.ident.clone().unwrap().to_string(), field.ty.clone()))
-                            .collect()
+                        let mut h = HashMap::new();
+
+                        for field in fields.iter()
+                        {
+                            h.insert(field.ident.clone().unwrap().to_string(), field.ty.clone());
+                        }
+
+
+
+                        CompleteStruct
+                        {
+                            name: name,
+                            fields: h,
+                        }
                     },
                     None => panic!("safe-builder-derive does not support tuple structs")
                 }
@@ -62,11 +75,35 @@ impl CompleteStruct
             panic!("safe-builder-derive does not support enums");
         }
     }
-}
 
-struct PartialStruct
-{
-    name: String,
-    contained: Vec<(String, Ty)>,
-    remaining: Vec<(String, Ty)>,
+    pub fn partials(&self) -> HashMap<Vec<String>, String>
+    {
+        let partials = (0..self.fields.len() + 1)
+            .flat_map(|n| self.fields.keys()
+                .combinations(n)
+                .map(|c| c.into_iter()
+                    .map(|s| s.to_owned())
+                    .collect::<Vec<_>>()))
+            .map(|mut partial| { partial.sort(); partial });
+        
+        let mut names = HashMap::new();
+        let mut values = Vec::new();
+
+        for partial in partials
+        {
+            let mut name = format!("{}BuilderWith{}", self.name,
+                partial.iter().fold(String::new(), |mut acc, item| { acc.push_str(item); acc}));
+            
+            while values.contains(&name)
+            {
+                name.push('_'); // TODO: a better way to make names unique?
+            }
+
+            values.push(name.clone());
+
+            names.insert(partial, name);
+        }
+
+        names
+    }
 }
