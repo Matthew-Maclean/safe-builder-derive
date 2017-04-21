@@ -42,7 +42,7 @@ fn test_complete_struct()
 
     let target = TargetStruct::new(&syn::parse_macro_input(input).unwrap());
 
-    let impls = target.partials.all().into_iter()
-        .map(|partial| partial.build(&target))
-        .collect::<Vec<_>>();
+    let actual = target.build();
+
+    // just test that nothing panics
 }

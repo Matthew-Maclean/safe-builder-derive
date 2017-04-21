@@ -16,7 +16,13 @@ use itertools::Itertools;
 #[proc_macro_derive(SafeBuilder)]
 pub fn safe_builder(input: TokenStream) -> TokenStream
 {
-    unimplemented!()
+    let s = input.to_string();
+
+    let ast = syn::parse_macro_input(&s).unwrap();
+
+    let target = TargetStruct::new(&ast);
+
+    target.build().parse().unwrap()
 }
 
 use syn::{Body, VariantData, Ty};
@@ -108,6 +114,53 @@ impl TargetStruct
         else
         {
             panic!("safe-builder-derive does not support enums");
+        }
+    }
+
+    pub fn build(&self) -> quote::Tokens
+    {
+        let target_id = quote::Ident::from(self.name.as_ref());
+
+        if self.fields.len() == 0
+        {
+            quote!
+            {
+                impl ::safe_builder::PartialBuilder for #target_id { }
+
+                impl ::safe_builder::SafeBuilder for #target_id
+                {
+                    fn build() -> #target_id
+                    {
+                        #target_id { }
+                    }
+                }
+            }
+        }
+        else
+        {
+            let init_struct_id = quote::Ident::from(self.partials.at_order(0).unwrap()[0].name.as_str());
+
+            let target_impl = quote!
+            {
+                impl ::safe_builder::SafeBuilder<#init_struct_id> for #target_id
+                {
+                    fn build() -> #init_struct_id
+                    {
+                        #init_struct_id{ }
+                    }
+                }
+            };
+
+            let other_impls = self.partials.all().into_iter()
+                .map(|partial| partial.build(&self))
+                .collect::<Vec<_>>();
+            
+            quote!
+            {
+                #target_impl
+
+                #(#other_impls)*
+            }
         }
     }
 }
