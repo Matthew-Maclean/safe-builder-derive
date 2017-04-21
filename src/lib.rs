@@ -318,10 +318,7 @@ impl PartialStruct
         {
             #partial_struct
 
-            impl #self_id
-            {
-                #partial_steps
-            }
+            #partial_steps
         }
     }
 }
