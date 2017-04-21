@@ -5,7 +5,7 @@ authors = ["Matthew Maclean"]
 description = "Derive a safe builder pattern"
 readme = "README.md"
 repository = "https://github.com/Matthew-Maclean/safe-builder-derive"
-keyword = ["proc-macro", "builder", "derive"]
+keywords = ["proc-macro", "builder", "derive"]
 license = "MIT"
 license-file = "LICENCE"
 
