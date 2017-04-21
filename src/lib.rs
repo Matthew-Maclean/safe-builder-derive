@@ -32,7 +32,7 @@ struct TargetStruct
 
 impl TargetStruct
 {
-    pub fn new(input: &syn::DeriveInput) -> TargetStruct
+    pub fn new(input: &syn::MacroInput) -> TargetStruct
     {
         assert!(input.generics.lifetimes.len() == 0, "safe-builder-derive does not support lifetimes");
         assert!(input.generics.ty_params.len() == 0, "safe-builder-derive does not support generic types");
@@ -171,7 +171,7 @@ impl PartialStruct
         self.fields.len()
     }
 
-    fn step<'a>(&self, other: &'a PartialStruct) -> Option<&'a String>
+    pub fn step<'a>(&self, other: &'a PartialStruct) -> Option<&'a String>
     {
         if self.order() == other.order() - 1 && other.order() != 0
         {
@@ -180,6 +180,125 @@ impl PartialStruct
         else
         {
             None
+        }
+    }
+
+    pub fn build(&self, target: &TargetStruct) -> quote::Tokens
+    {
+        let self_id = quote::Ident::from(self.name.as_str());
+
+        let partial_struct =
+        {
+            let fields = self.fields.iter()
+                .map(|name|
+                {
+                    let id = quote::Ident::from(name.as_str());
+                    let ty = target.fields.get(name).unwrap();
+
+                    quote!
+                    {
+                        #id: #ty
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            quote!
+            {
+                pub struct #self_id
+                {
+                    #(#fields),*
+                }
+
+                impl ::safe_builder::PartialBuilder for #self_id { }
+            }
+        };
+
+        let partial_steps = if self.fields.len() == target.fields.len()
+        {
+            let id = quote::Ident::from(self.name.as_str());
+
+            let steps = target.partials.at_order(self.order() + 1).unwrap().iter()
+                .map(|partial|
+                {
+                    let step = self.step(partial).unwrap().clone();
+
+                    let step_id = quote::Ident::from(step.as_str());
+                    let step_ty = target.fields.get(&step).unwrap();
+
+                    let step_struct = quote::Ident::from(partial.name.as_str());
+
+                    let step_field = quote!
+                    {
+                        #id: #id
+                    };
+
+                    let fields = self.fields.iter()
+                        .map(|name|
+                        {
+                            let id = quote::Ident::from(name.as_str());
+
+                            quote!
+                            {
+                                #id: self.#id
+                            }
+                        });
+
+                    quote!
+                    {
+                        fn #step_id(self, #step_id: #step_ty) -> #step_struct
+                        {
+                            #step_struct
+                            {
+                                #(#fields),*
+                                #step_field
+                            }
+                        }
+                    }
+                });
+
+            quote!
+            {
+                impl #id
+                {
+                    #(#steps)*
+                }
+            }
+        }
+        else
+        {
+            let target = quote::Ident::from(target.name.as_str());
+
+            let fields = self.fields.iter()
+                .map(|name|
+                {
+                    let id = quote::Ident::from(name.as_str());
+
+                    quote!
+                    {
+                        #id: self.#id
+                    }
+                });
+
+            quote!
+            {
+                fn build(self) -> #target
+                {
+                    #target
+                    {
+                        #(#fields),*
+                    }
+                }
+            }
+        };
+
+        quote!
+        {
+            #partial_struct
+
+            impl #self_id
+            {
+                #partial_steps
+            }
         }
     }
 }
