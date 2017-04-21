@@ -1,4 +1,4 @@
-## You woudn't call unwrap on a constructor!
+## You wouldn't call unwrap on a constructor!
 
 A proc-macro for deriving a type-safe builder pattern on any struct*
 
