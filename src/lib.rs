@@ -64,7 +64,7 @@ impl TargetStruct
                             map.insert(name, field.ty.clone());
                         }
 
-                        let field_combinations = (0..fields.len() + 1) // + 1 because .. ranges are inclusive..exclusive
+                        let field_combinations = (0..fields.len())
                             .flat_map(|n| field_names.iter()
                                 .combinations(n)
                                 .map(|v| v.into_iter()
@@ -213,10 +213,8 @@ impl PartialStruct
             }
         };
 
-        let partial_steps = if self.fields.len() == target.fields.len()
+        let partial_steps = if self.fields.len() == target.fields.len() - 1
         {
-            let id = quote::Ident::from(self.name.as_str());
-
             let steps = target.partials.at_order(self.order() + 1).unwrap().iter()
                 .map(|partial|
                 {
@@ -229,7 +227,7 @@ impl PartialStruct
 
                     let step_field = quote!
                     {
-                        #id: #id
+                        #step_id: #step_id
                     };
 
                     let fields = self.fields.iter()
@@ -258,7 +256,7 @@ impl PartialStruct
 
             quote!
             {
-                impl #id
+                impl #self_id
                 {
                     #(#steps)*
                 }
@@ -266,27 +264,52 @@ impl PartialStruct
         }
         else
         {
-            let target = quote::Ident::from(target.name.as_str());
+            let target_id = quote::Ident::from(target.name.as_str());
 
-            let fields = self.fields.iter()
-                .map(|name|
+            let steps = target.partials.at_order(self.order() + 1).unwrap().iter()
+                .map(|partial|
                 {
-                    let id = quote::Ident::from(name.as_str());
+                    let step = self.step(partial).unwrap().clone();
+
+                    let step_id = quote::Ident::from(step.as_str());
+                    let step_ty = target.fields.get(&step).unwrap();
+
+                    let step_struct = quote::Ident::from(partial.name.as_str());
+
+                    let step_field = quote!
+                    {
+                        #step_id: #step_id
+                    };
+
+                    let fields = self.fields.iter()
+                        .map(|name|
+                        {
+                            let id = quote::Ident::from(name.as_str());
+
+                            quote!
+                            {
+                                #id: self.#id
+                            }
+                        });
 
                     quote!
                     {
-                        #id: self.#id
+                        fn #step_id(self, #step_id: #step_ty) -> #target_id
+                        {
+                            #target_id
+                            {
+                                #(#fields),*
+                                #step_field
+                            }
+                        }
                     }
                 });
-
+            
             quote!
             {
-                fn build(self) -> #target
+                impl #self_id
                 {
-                    #target
-                    {
-                        #(#fields),*
-                    }
+                    #(#steps)*
                 }
             }
         };
