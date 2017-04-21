@@ -1,7 +1,12 @@
 [package]
 name = "safe-builder-derive"
 version = "0.1.0"
-authors = ["Matthew"]
+authors = ["Matthew Maclean"]
+readme = "README.md"
+repository = "https://github.com/Matthew-Maclean/safe-builder-derive"
+keyword = ["proc-macro", "builder", "derive"]
+license = "MIT"
+license-file = "LICENCE"
 
 [dependencies]
 quote = "0.3.15"
