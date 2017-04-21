@@ -1,6 +1,6 @@
 [package]
 name = "safe-builder-derive"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Matthew Maclean"]
 description = "Derive a safe builder pattern"
 readme = "README.md"
