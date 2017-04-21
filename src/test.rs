@@ -32,5 +32,17 @@ macro_rules! syn_type {
 #[test]
 fn test_complete_struct()
 {
-    unimplemented!()
+    let input = "
+    struct S
+    {
+        a: A,
+        b: B,
+        c: C,
+    }";
+
+    let target = TargetStruct::new(&syn::parse_macro_input(input).unwrap());
+
+    let impls = target.partials.all().into_iter()
+        .map(|partial| partial.build(&target))
+        .collect::<Vec<_>>();
 }

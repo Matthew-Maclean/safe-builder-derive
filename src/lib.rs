@@ -146,6 +146,13 @@ impl Partials
             None => None
         }
     }
+
+    pub fn all<'a>(&'a self) -> Vec<&'a PartialStruct>
+    {
+        self.0.values()
+            .flat_map(|order| order.into_iter())
+            .collect::<Vec<_>>()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -171,11 +178,27 @@ impl PartialStruct
         self.fields.len()
     }
 
-    pub fn step<'a>(&self, other: &'a PartialStruct) -> Option<&'a String>
+    pub fn step<'a>(&self, other: &'a PartialStruct) -> Option<String>
     {
         if self.order() == other.order() - 1 && other.order() != 0
         {
-            Some(&other.fields[other.fields.len() - 1])
+            let mut s = String::new();
+            for field in other.fields.iter()
+            {
+                if !self.fields.contains(field)
+                {
+                    s = field.to_owned();
+                }
+            }
+
+            if s == String::new()
+            {
+                panic!("partial of order n - 1 can't find last field in target!");
+            }
+            else
+            {
+                Some(s)
+            }
         }
         else
         {
@@ -186,7 +209,6 @@ impl PartialStruct
     pub fn build(&self, target: &TargetStruct) -> quote::Tokens
     {
         let self_id = quote::Ident::from(self.name.as_str());
-
         let partial_struct =
         {
             let fields = self.fields.iter()
@@ -213,9 +235,11 @@ impl PartialStruct
             }
         };
 
-        let partial_steps = if self.fields.len() == target.fields.len() - 1
+        let partial_steps = if self.fields.len() < target.fields.len() - 1
         {
             let steps = target.partials.at_order(self.order() + 1).unwrap().iter()
+                .filter(|partial| self.fields.iter()
+                    .all(|field| partial.fields.contains(field)))
                 .map(|partial|
                 {
                     let step = self.step(partial).unwrap().clone();
@@ -241,14 +265,30 @@ impl PartialStruct
                             }
                         });
 
-                    quote!
+                    if fields.len() == 0
                     {
-                        fn #step_id(self, #step_id: #step_ty) -> #step_struct
+                        quote!
                         {
-                            #step_struct
+                            fn #step_id(self, #step_id: #step_ty) -> #step_struct
                             {
-                                #(#fields),*
-                                #step_field
+                                #step_struct
+                                {
+                                    #step_field
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        quote!
+                        {
+                            fn #step_id(self, #step_id: #step_ty) -> #step_struct
+                            {
+                                #step_struct
+                                {
+                                    #(#fields),*,
+                                    #step_field
+                                }
                             }
                         }
                     }
@@ -264,52 +304,71 @@ impl PartialStruct
         }
         else
         {
-            let target_id = quote::Ident::from(target.name.as_str());
+            let target_id = quote::Ident::from(target.name.as_ref());
 
-            let steps = target.partials.at_order(self.order() + 1).unwrap().iter()
-                .map(|partial|
+            let missing =
+            {
+                let mut s = String::new();
+                for field in target.fields.keys()
                 {
-                    let step = self.step(partial).unwrap().clone();
-
-                    let step_id = quote::Ident::from(step.as_str());
-                    let step_ty = target.fields.get(&step).unwrap();
-
-                    let step_struct = quote::Ident::from(partial.name.as_str());
-
-                    let step_field = quote!
+                    if !self.fields.contains(field)
                     {
-                        #step_id: #step_id
-                    };
+                        s = field.to_owned();
+                    }
+                }
 
-                    let fields = self.fields.iter()
-                        .map(|name|
-                        {
-                            let id = quote::Ident::from(name.as_str());
+                if s == String::new()
+                {
+                    panic!("partial of order n - 1 can't find last field in target!");
+                }
+                else
+                {
+                    s
+                }
+            };
 
-                            quote!
-                            {
-                                #id: self.#id
-                            }
-                        });
+            let missing_id = quote::Ident::from(missing.as_str());
+            let missing_ty = target.fields.get(&missing);
+
+            let fields = self.fields.iter()
+                .map(|name|
+                {
+                    let id = quote::Ident::from(name.as_str());
 
                     quote!
                     {
-                        fn #step_id(self, #step_id: #step_ty) -> #target_id
+                        #id: self.#id
+                    }
+                });
+
+            if fields.len() == 0
+            {
+                quote!
+                {
+                    impl #self_id
+                    {
+                        fn #missing_id(self, #missing_id: #missing_ty) -> #target_id
+                        {
+                            #missing_id: #missing_id
+                        }
+                    }
+                }
+            }
+            else
+            {
+                quote!
+                {
+                    impl #self_id
+                    {
+                        fn #missing_id(self, #missing_id: #missing_ty) -> #target_id
                         {
                             #target_id
                             {
-                                #(#fields),*
-                                #step_field
+                                #(#fields),*,
+                                #missing_id: #missing_id
                             }
                         }
                     }
-                });
-            
-            quote!
-            {
-                impl #self_id
-                {
-                    #(#steps)*
                 }
             }
         };
